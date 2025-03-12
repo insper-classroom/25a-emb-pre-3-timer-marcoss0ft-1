@@ -6,22 +6,16 @@
 const int BTN_PIN_R = 28;
 const int LED_PIN_R = 4;
 
-volatile int flag_press = 0;
+volatile uint64_t press_time = 0;
 volatile int flag_release = 0;
-volatile int long_press_detected = 0;
-
-int64_t alarm_callback(alarm_id_t id, void *user_data) {
-    if (gpio_get(BTN_PIN_R) == 0) { // Se o botão ainda estiver pressionado
-        long_press_detected = 1; // Marca que o botão foi pressionado por tempo suficiente
-    }
-    return 0;
-}
 
 void btn_callback(uint gpio, uint32_t events) {
-    if (events == GPIO_IRQ_EDGE_FALL) { // Botão pressionado
-        flag_press = 1;
-    } else if (events == GPIO_IRQ_EDGE_RISE) { // Botão solto
-        flag_release = 1;
+    if (gpio == BTN_PIN_R) {
+        if (events == GPIO_IRQ_EDGE_FALL) { // Botão pressionado
+            press_time = to_us_since_boot(get_absolute_time());
+        } else if (events == GPIO_IRQ_EDGE_RISE) { // Botão solto
+            flag_release = 1;
+        }
     }
 }
 
@@ -40,15 +34,10 @@ int main() {
         BTN_PIN_R, GPIO_IRQ_EDGE_FALL | GPIO_IRQ_EDGE_RISE, true, &btn_callback);
 
     while (true) {
-        if (flag_press) {
-            flag_press = 0;
-            long_press_detected = 0;
-            add_alarm_in_ms(500, alarm_callback, NULL, false); // Inicia alarme para 500ms
-        }
-
         if (flag_release) {
             flag_release = 0;
-            if (long_press_detected) {
+            uint64_t elapsed_time = to_us_since_boot(get_absolute_time()) - press_time;
+            if (elapsed_time >= 500000) { // 500ms em microssegundos
                 gpio_put(LED_PIN_R, !gpio_get(LED_PIN_R)); // Alterna o LED
             }
         }
